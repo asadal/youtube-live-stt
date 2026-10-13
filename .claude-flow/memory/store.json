@@ -1,0 +1,59 @@
+{
+  "entries": {
+    "cmd-1791855965141": {
+      "key": "cmd-1791855965141",
+      "value": "{\"command\":\"git ls-files && wc -l $(git ls-files | grep -E '\\\\.(py|js|ts|html)$')\",\"exitCode\":0,\"success\":true}",
+      "namespace": "commands",
+      "storedAt": "2026-10-13T01:46:05.141Z",
+      "lastAccessed": "2026-10-13T01:46:05.141Z",
+      "accessCount": 0,
+      "expiresAt": "2026-11-12T01:46:05.141Z"
+    },
+    "cmd-1791855969008": {
+      "key": "cmd-1791855969008",
+      "value": "{\"command\":\"cat src/transcript.ts src/transcript.test.ts && grep -n \\\"transcript\\\\|segment\\\\|Segment\\\\|append\\\\|merge\\\" src/App.tsx | head -80\",\"exitCode\":0,\"success\":true}",
+      "namespace": "commands",
+      "storedAt": "2026-10-13T01:46:09.008Z",
+      "lastAccessed": "2026-10-13T01:46:09.008Z",
+      "accessCount": 0,
+      "expiresAt": "2026-11-12T01:46:09.008Z"
+    },
+    "cmd-1791855969176": {
+      "key": "cmd-1791855969176",
+      "value": "{\"command\":\"cat server/transcription-session.ts\",\"exitCode\":0,\"success\":true}",
+      "namespace": "commands",
+      "storedAt": "2026-10-13T01:46:09.176Z",
+      "lastAccessed": "2026-10-13T01:46:09.176Z",
+      "accessCount": 0,
+      "expiresAt": "2026-11-12T01:46:09.176Z"
+    },
+    "cmd-1791855973261": {
+      "key": "cmd-1791855973261",
+      "value": "{\"command\":\"sed -n 55,75p src/App.tsx && sed -n 140,240p src/App.tsx && grep -n \\\"setTranscripts\\\\|setPartials\\\" src/App.tsx && sed -n 355,372p src/App.tsx && sed -n 545,560p src/App.tsx\",\"exitCode\":0,\"success\":true}",
+      "namespace": "commands",
+      "storedAt": "2026-10-13T01:46:13.261Z",
+      "lastAccessed": "2026-10-13T01:46:13.261Z",
+      "accessCount": 0,
+      "expiresAt": "2026-11-12T01:46:13.261Z"
+    },
+    "cmd-1791855983250": {
+      "key": "cmd-1791855983250",
+      "value": "{\"command\":\"sed -n 40,55p src/App.tsx && sed -n 280,300p src/App.tsx && sed -n 20,30p src/App.tsx && npx vitest run 2>&1 | tail -5\",\"exitCode\":0,\"success\":true}",
+      "namespace": "commands",
+      "storedAt": "2026-10-13T01:46:23.250Z",
+      "lastAccessed": "2026-10-13T01:46:23.250Z",
+      "accessCount": 0,
+      "expiresAt": "2026-11-12T01:46:23.250Z"
+    },
+    "cmd-1791855986661": {
+      "key": "cmd-1791855986661",
+      "value": "{\"command\":\"npx vitest run 2>&1 | grep -A8 FAIL | head -20\",\"exitCode\":0,\"success\":true}",
+      "namespace": "commands",
+      "storedAt": "2026-10-13T01:46:26.661Z",
+      "lastAccessed": "2026-10-13T01:46:26.661Z",
+      "accessCount": 0,
+      "expiresAt": "2026-11-12T01:46:26.661Z"
+    }
+  },
+  "version": "3.0.0"
+}

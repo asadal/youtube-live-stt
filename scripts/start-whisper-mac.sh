@@ -19,4 +19,5 @@ exec "$server_binary" \
   --model "$model_path" \
   --language ko \
   --flash-attn \
-  --suppress-nst
+  --suppress-nst \
+  --no-language-probabilities

@@ -24,6 +24,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { startMicrophone, type MicrophoneController } from "./microphone";
 import {
   formatElapsedTime,
+  groupIntoParagraphs,
+  SENTENCES_PER_PARAGRAPH,
   serializeDiarizedSegments,
   serializeTranscripts,
 } from "./transcript";
@@ -143,6 +145,7 @@ export default function App() {
   const [keywords, setKeywords] = useState("");
   const [delay, setDelay] = useState("low");
   const [recordAudio, setRecordAudio] = useState(true);
+  const [sentencesPerParagraph, setSentencesPerParagraph] = useState(() => Number(localStorage.getItem("asadal-live-script-paragraph-sentences")) || SENTENCES_PER_PARAGRAPH);
   const [sessionId, setSessionId] = useState<string>();
   const [status, setStatus] = useState<Status>("idle");
   const [statusMessage, setStatusMessage] = useState("입력 소스를 선택하고 실시간 기록을 시작하세요.");
@@ -164,7 +167,8 @@ export default function App() {
     ? Boolean(openAIApiKey.trim()) || health?.engines.openai.serverKeyConfigured !== false
     : health?.engines.localWhisper.configured !== false;
   const canStart = inputReady && selectedEngineReady;
-  const fullText = useMemo(() => transcripts.map((item) => item.text).join("\n"), [transcripts]);
+  const paragraphs = useMemo(() => groupIntoParagraphs(transcripts, sentencesPerParagraph), [transcripts, sentencesPerParagraph]);
+  const fullText = useMemo(() => paragraphs.map((item) => item.text).join("\n"), [paragraphs]);
   const videoId = useMemo(() => getYouTubeVideoId(youtubeUrl), [youtubeUrl]);
   const elapsed = formatElapsedTime(elapsedSeconds);
   const partialText = Object.values(partials).join(" ");
@@ -181,6 +185,7 @@ export default function App() {
   }, []);
 
   useEffect(() => localStorage.setItem("asadal-live-script-engine", engine), [engine]);
+  useEffect(() => localStorage.setItem("asadal-live-script-paragraph-sentences", String(sentencesPerParagraph)), [sentencesPerParagraph]);
 
   useEffect(() => {
     if (status !== "live") return;
@@ -363,7 +368,7 @@ export default function App() {
   }
 
   function downloadText(includeTimestamps: boolean) {
-    const content = serializeTranscripts(transcripts, includeTimestamps);
+    const content = serializeTranscripts(paragraphs, includeTimestamps);
     const suffix = includeTimestamps ? "with-timestamps" : "text-only";
     downloadBlob(content, `live-transcript-${new Date().toISOString().slice(0, 10)}-${suffix}.txt`);
     if (downloadMenuRef.current) downloadMenuRef.current.open = false;
@@ -537,6 +542,9 @@ export default function App() {
                   </button>
                 </div>
                 <div className="actions">
+                  <select className="paragraph-select" value={sentencesPerParagraph} onChange={(event) => setSentencesPerParagraph(Number(event.target.value))} aria-label="단락 길이" title="단락 길이: 이 문장 수 이상 모이면 다음 단락으로 나눕니다.">
+                    {[1, 2, 3, 4, 5, 6, 8, 10].map((count) => <option key={count} value={count}>{count === 1 ? "문장마다" : `${count}문장씩`}</option>)}
+                  </select>
                   <button type="button" onClick={copyText} disabled={!fullText} aria-label="텍스트 복사">{copied ? <Check size={17} /> : <Clipboard size={17} />}</button>
                   <details className="download-menu" ref={downloadMenuRef}>
                     <summary className={!fullText ? "disabled" : ""} aria-label="텍스트 다운로드" onClick={(event) => { if (!fullText) event.preventDefault(); }}><Download size={17} /></summary>
@@ -550,13 +558,13 @@ export default function App() {
                 <div className="empty-state"><div className="sound-wave"><i /><i /><i /><i /><i /></div><strong>아직 기록이 없습니다</strong><span>실시간 기록을 시작하면 이곳에 텍스트가 나타납니다.</span></div>
               ) : (
                 <div className="transcript-list">
-                  {transcripts.map((item) => <p key={item.itemId}><time>{new Date(item.receivedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</time><span>{item.text}</span></p>)}
+                  {paragraphs.map((item) => <p key={item.id}><time>{new Date(item.receivedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</time><span>{item.text}</span></p>)}
                   {partialText && <p className="partial"><time>지금</time><span>{partialText}<i className="cursor" /></span></p>}
                   <div ref={endRef} />
                 </div>
               )}
             </div>
-            <footer className="transcript-footer"><span>{transcripts.length}개 기록</span><span>한국어 · {engineName}</span></footer>
+            <footer className="transcript-footer"><span>{paragraphs.length}개 단락</span><span>한국어 · {engineName}</span></footer>
           </section>
         </section>
 
