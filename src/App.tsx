@@ -25,6 +25,8 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { startMicrophone, type MicrophoneController } from "./microphone";
 import {
   formatElapsedTime,
@@ -711,7 +713,9 @@ export default function App() {
                 <div><strong>{analysisTaskLabel[analysis.task]} 결과</strong><span>Perplexity sonar-pro · 출처 {analysis.sources.length}개</span></div>
                 <button className="small-button" type="button" onClick={() => downloadAnalysis(analysis)}><Download size={14} /> 결과 다운로드</button>
               </div>
-              <div className="analysis-text">{analysis.text}</div>
+              <div className="analysis-text">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>{analysis.text}</ReactMarkdown>
+              </div>
               {analysis.sources.length > 0 && (
                 <ol className="analysis-sources">
                   {analysis.sources.map((source, index) => <li key={`${index}-${source.url}`}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></li>)}
