@@ -175,6 +175,54 @@ describe("LocalWhisperEngine", () => {
     }
   });
 
+  it("프롬프트에 라벨 문구를 넣지 않고, 프롬프트를 따라 쓴 문장은 기록에서 뺀다", async () => {
+    const replies = ["오늘 회의를 시작합니다", "한국어 인터뷰. 인공지능, 정책. 첫 안건입니다"];
+    const prompts: string[] = [];
+    const server = createServer(async (request, response) => {
+      if (request.url === "/") {
+        response.end("ready");
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(chunk as Buffer);
+      const form = await new Response(Buffer.concat(chunks), { headers: { "content-type": request.headers["content-type"]! } }).formData();
+      // multipart 전송 중 줄바꿈이 \r\n으로 바뀐다.
+      prompts.push(String(form.get("prompt")).replace(/\r\n/g, "\n"));
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ text: replies.shift() }));
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("테스트 서버 주소를 확인할 수 없습니다.");
+    const finalTexts: string[] = [];
+    const engine = new LocalWhisperEngine({
+      serverUrl: `http://127.0.0.1:${address.port}`,
+      prompt: "한국어 인터뷰",
+      keywords: ["인공지능", "정책"],
+      delay: "minimal",
+    }, {
+      onReady: () => undefined,
+      onPartial: () => undefined,
+      onFinal: (event) => finalTexts.push(event.text),
+      onError: (message) => { throw new Error(message); },
+    });
+
+    try {
+      await engine.start();
+      engine.appendAudio(tone(6, 8_000));
+      await engine.stop();
+      expect(prompts).toEqual([
+        "한국어 인터뷰.\n인공지능, 정책.",
+        "한국어 인터뷰.\n인공지능, 정책.\n오늘 회의를 시작합니다.",
+      ]);
+      expect(finalTexts).toEqual(["오늘 회의를 시작합니다.", "첫 안건입니다."]);
+    } finally {
+      server.close();
+      await once(server, "close");
+    }
+  });
+
   it("겹친 오디오가 더 정확하게 다시 인식되면 같은 itemId로 직전 기록을 고친다", async () => {
     const replies = [
       { text: "오늘 회의를 시작하겠슴니다", probability: 0.4 },

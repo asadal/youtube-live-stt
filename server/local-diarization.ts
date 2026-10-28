@@ -170,7 +170,7 @@ async function transcribeChunk(chunk: AudioChunk, options: LocalDiarizationOptio
   form.append("language", "ko");
   form.append("response_format", "srt");
   form.append("temperature", "0.0");
-  const prompt = [options.prompt, options.keywords?.length ? `주요 용어: ${options.keywords.join(", ")}` : ""].filter(Boolean).join("\n");
+  const prompt = [options.prompt, options.keywords?.length ? options.keywords.join(", ") : ""].filter(Boolean).join("\n");
   if (prompt) form.append("prompt", prompt);
   const response = await fetch(new URL("/inference", options.whisperUrl), {
     method: "POST",

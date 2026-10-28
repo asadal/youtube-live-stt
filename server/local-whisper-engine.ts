@@ -247,6 +247,17 @@ export function parseWhisperResponse(body: string): ScoredTranscript {
   return { text, probabilities: matches ? probabilities : undefined };
 }
 
+// 음성 맥락·주요 용어 문장을 Whisper가 그대로 따라 쓴 부분을 지운다.
+export function removePromptEcho(transcript: ScoredTranscript, promptSentences: string[]): ScoredTranscript {
+  let text = transcript.text;
+  for (const sentence of promptSentences) {
+    text = text.split(sentence).join(" ").split(sentence.replace(/[.?!…]+$/, "")).join(" ");
+  }
+  text = text.replace(/\s+/g, " ").replace(IGNORED_CHARACTER_PREFIX, "").trim();
+  if (text === transcript.text) return transcript;
+  // 글자가 빠졌으므로 글자별 확률은 더 이상 맞지 않는다.
+  return { text };
+}
 
 export class LocalWhisperEngine implements TranscriptionEngine {
   readonly sampleRate = SAMPLE_RATE;
@@ -341,11 +352,13 @@ export class LocalWhisperEngine implements TranscriptionEngine {
     form.append("temperature_inc", "0.2");
     form.append("no_timestamps", "true");
     form.append("suppress_non_speech", "true");
-    const prompt = [
+    // Whisper는 프롬프트를 앞선 대본으로 보고 말이 없는 구간에서 그대로 따라 쓰기도 하므로
+    // "주요 용어:", "직전 문맥:" 같은 라벨 없이 대본처럼 이어지는 문장만 넣는다.
+    const promptSentences = [
       asSentence(this.options.prompt),
-      this.options.keywords.length ? asSentence(`주요 용어: ${this.options.keywords.join(", ")}`) : "",
-      this.previousTranscript ? `직전 문맥: ${this.previousTranscript.slice(-300)}` : "",
-    ].filter(Boolean).join("\n");
+      this.options.keywords.length ? asSentence(this.options.keywords.join(", ")) : "",
+    ].filter(Boolean);
+    const prompt = [...promptSentences, this.previousTranscript.slice(-300)].filter(Boolean).join("\n");
     if (prompt) {
       form.append("prompt", prompt);
       form.append("carry_initial_prompt", "true");
@@ -359,7 +372,7 @@ export class LocalWhisperEngine implements TranscriptionEngine {
     const body = await response.text();
     if (!response.ok) throw new Error(`로컬 Whisper 전사 오류 (${response.status}): ${body.slice(0, 300)}`);
 
-    const parsed = parseWhisperResponse(body);
+    const parsed = removePromptEcho(parseWhisperResponse(body), promptSentences);
     if (!parsed.text) return;
     const transcript = { ...parsed, text: addSentencePunctuation(parsed.text) };
     this.previousTranscript = transcript.text;
