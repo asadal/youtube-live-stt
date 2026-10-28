@@ -17,6 +17,7 @@ import {
   temporaryAudioTtlHours,
 } from "./temporary-audio.js";
 import { parseYouTubeUrl, sanitizeKeywords } from "./youtube.js";
+import { analyzeTranscript, resolvePerplexityApiKey, type AnalysisTask } from "./perplexity.js";
 
 const app = express();
 const server = createServer(app);
@@ -26,6 +27,7 @@ const sessions = new Map<string, TranscriptionSession>();
 const allowedDelays = new Set<Delay>(["minimal", "low", "medium", "high", "xhigh"]);
 const allowedSources = new Set<AudioSource>(["youtube", "microphone"]);
 const allowedEngines = new Set<TranscriptionEngineKind>(["openai", "local-whisper"]);
+const allowedAnalysisTasks = new Set<AnalysisTask>(["summary", "fact-check", "correction"]);
 const localWhisperUrl = process.env.WHISPER_CPP_URL?.trim();
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(currentDirectory, "..");
@@ -38,6 +40,24 @@ const localPyannoteConfigured = Boolean(
   && existsSync(pyannoteScriptPath)
   && (process.env.HUGGINGFACE_TOKEN || process.env.PYANNOTE_MODEL_PATH),
 );
+
+// 녹취록 전체를 받으므로 다른 API보다 큰 본문을 허용한다. 32kb 파서보다 먼저 등록해야 한다.
+app.post("/api/analysis", express.json({ limit: "2mb" }), async (request, response) => {
+  const requestedTask = String(request.body.task ?? "") as AnalysisTask;
+  if (!allowedAnalysisTasks.has(requestedTask)) return response.status(400).json({ error: "지원하지 않는 분석 기능입니다." });
+  const transcript = String(request.body.transcript ?? "").trim();
+  if (!transcript) return response.status(400).json({ error: "분석할 녹취록이 없습니다." });
+  const apiKey = resolvePerplexityApiKey(
+    process.env.PERPLEXITY_API_KEY,
+    String(request.body.perplexityApiKey ?? "").slice(0, 512),
+  );
+  if (!apiKey) return response.status(503).json({ error: "서버에 PERPLEXITY_API_KEY를 설정하거나 Perplexity API 키를 입력해 주세요." });
+  try {
+    response.json(await analyzeTranscript(apiKey, requestedTask, transcript, sanitizeKeywords(request.body.keywords)));
+  } catch (error) {
+    response.status(502).json({ error: error instanceof Error ? error.message : "Perplexity 분석을 처리하지 못했습니다." });
+  }
+});
 
 app.use(express.json({ limit: "32kb" }));
 
@@ -52,6 +72,9 @@ app.get("/api/health", (_request, response) => {
     diarizationEngines: {
       openai: { serverKeyConfigured: Boolean(process.env.OPENAI_API_KEY) },
       localPyannote: { configured: localPyannoteConfigured },
+    },
+    analysis: {
+      perplexity: { serverKeyConfigured: Boolean(process.env.PERPLEXITY_API_KEY?.trim()) },
     },
     temporaryAudioTtlHours,
   });

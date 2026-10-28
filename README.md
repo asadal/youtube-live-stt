@@ -14,6 +14,7 @@
 - 세션 음성을 운영체제 임시폴더에 MP3로 저장
 - 임시 음성·화자 분리 결과 다운로드와 즉시 삭제
 - 웹페이지에서 세션용 OpenAI API 키 입력
+- Perplexity로 녹취록 요약·정리, 팩트체크, 용어·고유명사 교정
 - 시스템·라이트·다크 테마
 
 웹에서 입력한 API 키는 브라우저 저장소나 파일에 저장하지 않으며, 세션 생성 요청을 통해 서버 메모리로만 전달됩니다. 서버가 응답 본문에 키를 포함하거나 애플리케이션 로그에 직접 기록하지도 않습니다. 공개 배포에서는 반드시 HTTPS를 사용하고 요청 본문 로깅을 꺼야 합니다. 운영 환경에서는 웹 입력보다 서버의 비밀 관리 기능 또는 `OPENAI_API_KEY` 환경 변수를 권장합니다.
@@ -27,6 +28,16 @@
 3. OpenAI 방식은 24kHz PCM을 Realtime WebSocket으로 전송합니다.
 4. 로컬 방식은 16kHz PCM을 겹치는 짧은 구간으로 나눠 `whisper.cpp` 서버에 전송합니다.
 5. 화자 분리를 켜면 별도로 16kHz mono MP3를 임시폴더에 기록합니다.
+
+### Perplexity 분석
+
+전사를 정지한 뒤 실시간 기록 전체를 Perplexity Sonar API(`/v1/sonar`)의 `sonar-pro` 모델로 보내 세 가지 분석을 실행할 수 있습니다. 결과 본문의 `[1]`, `[2]` 번호는 아래 출처 목록 순서와 같습니다.
+
+- **요약·정리**: 녹취록 내용만으로 요약, 핵심 내용, 결정 사항을 정리합니다. 웹 검색을 쓰지 않습니다.
+- **팩트체크**: 수치·날짜·인물·기관 등 사실 주장을 웹 검색으로 확인하고 출처를 붙입니다.
+- **용어·고유명사 교정**: 잘못 인식된 고유명사와 전문 용어를 웹 검색으로 확인해 교정 목록과 교정본을 만듭니다. 인식 설정의 주요 용어를 참고합니다.
+
+API 키는 서버 `.env`의 `PERPLEXITY_API_KEY`를 먼저 사용하고, 없을 때만 화면에서 입력한 키를 사용합니다. 분석 결과는 원래 실시간 기록을 바꾸지 않으며 별도 텍스트 파일로 내려받을 수 있습니다.
 
 ### 녹음 후 화자 분리
 
@@ -54,6 +65,7 @@ youtube-live-stt/
 │   ├── openai-transcription-engine.ts # OpenAI Realtime 어댑터
 │   ├── local-whisper-engine.ts        # whisper.cpp 실시간 어댑터
 │   ├── diarization.ts                 # OpenAI 화자 분리
+│   ├── perplexity.ts                  # Perplexity 녹취록 분석
 │   ├── local-diarization.ts           # pyannote·Whisper 결과 결합
 │   ├── temporary-audio.ts             # 임시 녹음 관리
 │   └── *.test.ts

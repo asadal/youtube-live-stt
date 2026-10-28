@@ -13,7 +13,11 @@ import {
   Moon,
   Pause,
   Play,
+  ListChecks,
   Radio,
+  SearchCheck,
+  Sparkles,
+  SpellCheck,
   Square,
   Sun,
   Trash2,
@@ -64,6 +68,9 @@ type Health = {
     openai: { serverKeyConfigured: boolean };
     localPyannote: { configured: boolean };
   };
+  analysis: {
+    perplexity: { serverKeyConfigured: boolean };
+  };
 };
 type DiarizedSegment = {
   speaker: string;
@@ -78,12 +85,23 @@ type DiarizationResult = {
   chunkCount: number;
   speakerLabelsAreChunkLocal: boolean;
 };
+type AnalysisTask = "summary" | "fact-check" | "correction";
+type AnalysisResult = {
+  task: AnalysisTask;
+  text: string;
+  sources: { title: string; url: string }[];
+};
 type StreamEvent =
   | { type: "status"; status: Exclude<Status, "idle">; message: string }
   | { type: "partial"; itemId: string; sequence: number; text: string }
   | { type: "final"; itemId: string; sequence: number; text: string; receivedAt: string }
   | { type: "error"; message: string };
 
+const analysisTaskLabel: Record<AnalysisTask, string> = {
+  summary: "요약·정리",
+  "fact-check": "팩트체크",
+  correction: "용어·고유명사 교정",
+};
 const emptyRecording: Recording = { enabled: true, available: false };
 const statusLabel: Record<Status, string> = {
   idle: "대기",
@@ -154,6 +172,11 @@ export default function App() {
   const [recording, setRecording] = useState<Recording>(emptyRecording);
   const [diarization, setDiarization] = useState<DiarizationResult>();
   const [diarizing, setDiarizing] = useState(false);
+  const [perplexityApiKey, setPerplexityApiKey] = useState("");
+  const [showPerplexityKey, setShowPerplexityKey] = useState(false);
+  const [analyzingTask, setAnalyzingTask] = useState<AnalysisTask>();
+  const [analysis, setAnalysis] = useState<AnalysisResult>();
+  const [analysisError, setAnalysisError] = useState("");
   const [copied, setCopied] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
@@ -172,6 +195,8 @@ export default function App() {
   const videoId = useMemo(() => getYouTubeVideoId(youtubeUrl), [youtubeUrl]);
   const elapsed = formatElapsedTime(elapsedSeconds);
   const partialText = Object.values(partials).join(" ");
+  const perplexityServerKey = Boolean(health?.analysis.perplexity.serverKeyConfigured);
+  const analysisReady = Boolean(fullText) && !isSessionActive && !analyzingTask && (perplexityServerKey || Boolean(perplexityApiKey.trim()));
   const engineName = engine === "openai" ? "OpenAI API" : "로컬 Whisper";
 
   useEffect(() => {
@@ -345,6 +370,37 @@ export default function App() {
     } finally {
       setDiarizing(false);
     }
+  }
+
+  async function runAnalysis(task: AnalysisTask) {
+    setAnalyzingTask(task);
+    setAnalysisError("");
+    try {
+      const response = await fetch("/api/analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task,
+          transcript: fullText,
+          keywords: keywords.split(",").map((item) => item.trim()).filter(Boolean),
+          perplexityApiKey: perplexityServerKey ? undefined : perplexityApiKey.trim() || undefined,
+        }),
+      });
+      const data = await response.json() as Omit<AnalysisResult, "task"> & { error?: string };
+      if (!response.ok) throw new Error(data.error || "Perplexity 분석을 처리하지 못했습니다.");
+      setAnalysis({ task, text: data.text, sources: data.sources });
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Perplexity 분석을 처리하지 못했습니다.");
+    } finally {
+      setAnalyzingTask(undefined);
+    }
+  }
+
+  function downloadAnalysis(result: AnalysisResult) {
+    // 본문의 [1], [2] 번호와 같은 순서로 출처를 적는다.
+    const sources = result.sources.map((source, index) => `[${index + 1}] ${source.title} ${source.url}`).join("\n");
+    const content = sources ? `${result.text}\n\n출처\n${sources}\n` : `${result.text}\n`;
+    downloadBlob(content, `${result.task}-${new Date().toISOString().slice(0, 10)}.txt`);
   }
 
   async function deleteRecording() {
@@ -615,6 +671,55 @@ export default function App() {
             )}
           </section>
         )}
+
+        <section className="panel postprocess-panel analysis-panel">
+          <div className="panel-heading postprocess-heading">
+            <div><span className="step">{recordAudio ? "05" : "04"}</span><h2>LLM 분석 · Perplexity</h2></div>
+            <Sparkles size={22} />
+          </div>
+          <div className="analysis-setup">
+            <div className="api-key-field">
+              <label htmlFor="perplexity-api-key">Perplexity API 키 <span>{perplexityServerKey ? "서버 .env 키를 사용합니다" : health ? "서버 키가 없어 입력한 키를 사용합니다" : "확인 중"}</span></label>
+              <div>
+                <input
+                  id="perplexity-api-key"
+                  type={showPerplexityKey ? "text" : "password"}
+                  value={perplexityApiKey}
+                  onChange={(event) => setPerplexityApiKey(event.target.value)}
+                  placeholder={perplexityServerKey ? "서버 키 사용 중" : "pplx-..."}
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={perplexityServerKey || Boolean(analyzingTask)}
+                />
+                <button type="button" onClick={() => setShowPerplexityKey((value) => !value)} aria-label={showPerplexityKey ? "API 키 숨기기" : "API 키 보기"} disabled={perplexityServerKey}>
+                  {showPerplexityKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <small>서버의 PERPLEXITY_API_KEY가 있으면 그 키를 먼저 쓰고, 없을 때만 여기 입력한 키를 씁니다. 입력한 키는 저장하지 않고 분석 요청에만 사용합니다.</small>
+            </div>
+            <div className="analysis-actions">
+              <button className="small-button primary" type="button" onClick={() => runAnalysis("summary")} disabled={!analysisReady}>{analyzingTask === "summary" ? <LoaderCircle size={14} className="spin" /> : <ListChecks size={14} />} 요약·정리</button>
+              <button className="small-button primary" type="button" onClick={() => runAnalysis("fact-check")} disabled={!analysisReady}>{analyzingTask === "fact-check" ? <LoaderCircle size={14} className="spin" /> : <SearchCheck size={14} />} 팩트체크</button>
+              <button className="small-button primary" type="button" onClick={() => runAnalysis("correction")} disabled={!analysisReady}>{analyzingTask === "correction" ? <LoaderCircle size={14} className="spin" /> : <SpellCheck size={14} />} 용어·고유명사 교정</button>
+            </div>
+            {analysisError && <p className="analysis-help analysis-error" role="alert">{analysisError}</p>}
+            <p className="analysis-help">{isSessionActive ? "전사를 정지하면 기록 전체로 분석할 수 있습니다." : fullText ? "실시간 기록 전체를 Perplexity로 보냅니다. 팩트체크와 교정은 웹 검색을 함께 사용합니다." : "실시간 기록이 생기면 분석할 수 있습니다."}</p>
+          </div>
+          {analysis && (
+            <div className="diarization-result">
+              <div className="result-heading">
+                <div><strong>{analysisTaskLabel[analysis.task]} 결과</strong><span>Perplexity sonar-pro · 출처 {analysis.sources.length}개</span></div>
+                <button className="small-button" type="button" onClick={() => downloadAnalysis(analysis)}><Download size={14} /> 결과 다운로드</button>
+              </div>
+              <div className="analysis-text">{analysis.text}</div>
+              {analysis.sources.length > 0 && (
+                <ol className="analysis-sources">
+                  {analysis.sources.map((source, index) => <li key={`${index}-${source.url}`}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></li>)}
+                </ol>
+              )}
+            </div>
+          )}
+        </section>
       </main>
       <footer className="site-footer"><span>asadal's Live Script</span><span>임시 음성은 설정된 보존 시간이 지나면 자동 삭제됩니다.</span></footer>
     </div>
